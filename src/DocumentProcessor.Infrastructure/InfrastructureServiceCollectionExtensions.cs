@@ -204,23 +204,44 @@ public static class InfrastructureServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Builds a SQL Server connection string from AWS Secrets Manager
+    /// Builds a string from AWS Secrets Manager
     /// </summary>
+    /// 
     private static async Task<string> BuildConnectionStringFromSecretsManager()
     {
         var secretsService = new SecretsManagerService();
+        string secretJson;
 
-        // Get all connection info from secret with description starting with "Password for RDS MSSQL used for MAM319."
-        var secretJson = await secretsService.GetSecretByDescriptionPrefixAsync("Password for RDS MSSQL used for MAM319.");
-        var username = secretsService.GetFieldFromSecret(secretJson, "username");
-        var password = secretsService.GetFieldFromSecret(secretJson, "password");
-        var host = secretsService.GetFieldFromSecret(secretJson, "host");
-        var port = secretsService.GetFieldFromSecret(secretJson, "port");
-        var dbname = secretsService.GetFieldFromSecret(secretJson, "dbname");
+        try
+        {
+            secretJson = await secretsService.GetSecretAsync("atx-db-modernization-atx-db-modernization-1-target");
+            if (!string.IsNullOrWhiteSpace(secretJson))
+            {
+                var username = secretsService.GetFieldFromSecret(secretJson, "username");
+                var password = secretsService.GetFieldFromSecret(secretJson, "password");
+                var host = secretsService.GetFieldFromSecret(secretJson, "host");
+                var port = secretsService.GetFieldFromSecret(secretJson, "port");
+                var dbname = "postgres";
 
-        // Build SQL Server connection string
-        var connectionString = $"Server={host},{port};Database={dbname};User Id={username};Password={password};TrustServerCertificate=true;MultipleActiveResultSets=true";
+                return $"Host={host};Port={port};Database={dbname};Username={username};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+            }
+        }
+        catch (Exception)
+        {
+        }
 
-        return connectionString;
+        secretJson = await secretsService.GetSecretByDescriptionPrefixAsync("Password for RDS MSSQL used for MAM319.");
+        if (!string.IsNullOrWhiteSpace(secretJson))
+        {
+            var username = secretsService.GetFieldFromSecret(secretJson, "username");
+            var password = secretsService.GetFieldFromSecret(secretJson, "password");
+            var host = secretsService.GetFieldFromSecret(secretJson, "host");
+            var port = secretsService.GetFieldFromSecret(secretJson, "port");
+            var dbname = secretsService.GetFieldFromSecret(secretJson, "dbname");
+
+            return $"Server={host},{port};Database={dbname};User Id={username};Password={password};TrustServerCertificate=true;Encrypt=true";
+        }
+
+        throw new InvalidOperationException("Failed to retrieve database credentials from Secrets Manager.");
     }
 }
